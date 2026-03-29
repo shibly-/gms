@@ -1,0 +1,16 @@
+A prototype for a garage management system as per the below requirement.
+
+1. A vehicle enter into a garage and the gate keeper take a photo of the vehicle's number plate.
+2. If the vehicle does not have number plate, then the vehicle will be marked as on test vehicle.
+3. A supervisor will create a ticket for that vehicle and assign to a senior technical staff.
+4. When the ticket is assigned, an ivr call and an email will notify the manager and the owner of the vehicle with ticket no as reference.
+5. Senior Technical staff will list out all the identified problems/issues of that vehicle and will provide the cost to fix each problem of that vehicle and will provide the consolidated service charge to fix all the identified issues of the vehicle. An notification email will be sent to the manager, supervisor and the owner of the vehicle with same ticket no as reference.
+6. The owner of the vehicle can remove any items from the list of identified problems/issues to fix. 
+7. The owner of the vehicle could request for a discount and the manager could finalize and approves discount amount which will be deducted from the final service charge. 
+8. Once the owner of the vehicle confirms and the supervisor approves the final work order, the senior technical staff starts fixing the issues with his/her technical team.
+9. Once the vehicle is fixed and all necessary QC is completed, the manager, supervisor and the owner of the vehicle will be informed through ivr call and email.
+10. The consolidated service charge will be sent to the manager, supervisor and the owner of the vehicle to pay the bill through email.
+11. Once the bill is paid, the manager, supervisor and the owner of the vehicle will get a notification email and a gate pass will be issued for this vehicle.
+12. Once the supervisor approves the gate pass, the gate keeper can see that in his screen.
+13. Supervisor will monitor all these technical activities to fix the vehicle and the manager can do every operations of above role.
+14. A big screen will show senior technical staff wise assigned vehicle list and also unassigned vehicle.
