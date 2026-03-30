@@ -20,7 +20,7 @@ const ORDER_MANAGEMENT_ITEMS = [
 ]
 
 const STAFF_MANAGEMENT_ITEMS = [
-  { id: 'Staff Management', label: 'All staff' },
+  { id: 'Staff Management', label: 'All Staff' },
   { id: 'Supervisor Management' },
   { id: 'Technical Staff Management' },
   { id: 'Manager Management' },
