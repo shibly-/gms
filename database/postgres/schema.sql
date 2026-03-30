@@ -1,4 +1,4 @@
--- GMS (Garage / work-order management) — PostgreSQL schema
+-- Garage Management System - v1.0 — PostgreSQL schema
 -- Aligns with frontend entities in frontend/src/App.jsx (tickets, items, staff, timeline).
 --
 -- Apply (empty database):

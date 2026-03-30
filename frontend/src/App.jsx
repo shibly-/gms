@@ -168,6 +168,105 @@ const roles = [
   'Owner (Client)',
 ]
 
+const TECH_ICON_ITEMS = [
+  {
+    key: 'react',
+    label: 'React',
+    color: '#0ea5e9',
+    svg: (
+      <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+        <circle cx="32" cy="32" r="7.5" fill="currentColor" />
+        <ellipse cx="32" cy="14" rx="6" ry="9" fill="none" stroke="currentColor" strokeWidth="4" />
+        <ellipse cx="32" cy="50" rx="6" ry="9" fill="none" stroke="currentColor" strokeWidth="4" />
+        <ellipse cx="14" cy="32" rx="6" ry="9" fill="none" stroke="currentColor" strokeWidth="4" transform="rotate(-90 14 32)" />
+        <ellipse cx="50" cy="32" rx="6" ry="9" fill="none" stroke="currentColor" strokeWidth="4" transform="rotate(-90 50 32)" />
+      </svg>
+    ),
+  },
+  {
+    key: 'vite',
+    label: 'Vite',
+    color: '#0f766e',
+    svg: (
+      <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+        <path
+          d="M16 44 L32 20 L48 44"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="5"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M22 44 L32 26 L42 44"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="4"
+          strokeLinecap="round"
+        />
+      </svg>
+    ),
+  },
+  {
+    key: 'javascript',
+    label: 'JavaScript',
+    color: '#f59e0b',
+    svg: (
+      <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+        <rect x="14" y="14" width="36" height="36" rx="10" fill="none" stroke="currentColor" strokeWidth="4" />
+        <text x="32" y="40" textAnchor="middle" fontSize="20" fontWeight="800" fill="currentColor">
+          JS
+        </text>
+      </svg>
+    ),
+  },
+  {
+    key: 'tesseract',
+    label: 'Tesseract.js',
+    color: '#7c3aed',
+    svg: (
+      <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+        <path
+          d="M18 44 V20 Q18 16 22 16 H36 Q40 16 40 20 V44 Q40 48 36 48 H22 Q18 48 18 44 Z"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="4"
+        />
+        <path d="M40 24 H46 Q50 24 50 28 V40 Q50 44 46 44 H40" fill="none" stroke="currentColor" strokeWidth="4" />
+        <text x="30" y="37" textAnchor="middle" fontSize="16" fontWeight="800" fill="currentColor">
+          OCR
+        </text>
+      </svg>
+    ),
+  },
+  {
+    key: 'postgres',
+    label: 'PostgreSQL',
+    color: '#1f2937',
+    svg: (
+      <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+        <ellipse cx="32" cy="18" rx="18" ry="8" fill="none" stroke="currentColor" strokeWidth="4" />
+        <path
+          d="M14 18 V38 Q14 46 32 46 Q50 46 50 38 V18"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="4"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M14 28 V48 Q14 56 32 56 Q50 56 50 48 V28"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="4"
+          strokeLinejoin="round"
+        />
+        <text x="32" y="41" textAnchor="middle" fontSize="16" fontWeight="800" fill="currentColor">
+          PG
+        </text>
+      </svg>
+    ),
+  },
+]
+
 const HISTORY_PAGE_SIZE = 20
 
 const ORDER_MANAGEMENT_ITEMS = [
@@ -1309,7 +1408,7 @@ function App() {
     <div className="app">
       <header className="topbar">
         <div>
-          <h1>Garage Management System</h1>
+          <h1>Garage Management System - v1.0</h1>
           <p className="muted">Role based modules for intake, operations, and audit trail.</p>
         </div>
         <div className="topbar-actions">
@@ -1511,6 +1610,20 @@ function App() {
                     )
                   })}
                 </svg>
+              </div>
+              <div className="panel tech-stack-card">
+                <h3 id="dashboard-tech-stack-heading">Technology stack</h3>
+                <div
+                  className="tech-icons-row"
+                  aria-labelledby="dashboard-tech-stack-heading"
+                >
+                  {TECH_ICON_ITEMS.map((t) => (
+                    <div key={t.key} className="tech-icon" style={{ color: t.color }} title={t.label}>
+                      {t.svg}
+                      <span className="tech-icon-label">{t.label}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}
