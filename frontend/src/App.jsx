@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import './App.css'
 
 const roles = [
@@ -8,6 +8,8 @@ const roles = [
   'Manager',
   'Owner (Client)',
 ]
+
+const HISTORY_PAGE_SIZE = 20
 
 const menus = [
   'Dashboard',
@@ -323,6 +325,29 @@ function App() {
     gateKeeper: '',
     vehicleName: '',
   })
+  const [historyPage, setHistoryPage] = useState(1)
+  const historyRowsSorted = useMemo(() => {
+    const closed = tickets.filter((ticket) => ticket.stage === 'Closed')
+    const rows = closed.length ? [...closed] : [...tickets]
+    rows.sort((a, b) => {
+      const da = a.createdAt || ''
+      const db = b.createdAt || ''
+      if (db !== da) return db.localeCompare(da)
+      return String(b.id).localeCompare(String(a.id))
+    })
+    return rows
+  }, [tickets])
+  const historyTotalPages = Math.max(1, Math.ceil(historyRowsSorted.length / HISTORY_PAGE_SIZE))
+
+  useEffect(() => {
+    setHistoryPage((page) => Math.min(page, historyTotalPages))
+  }, [historyTotalPages])
+
+  const historyPageClamped = Math.min(Math.max(1, historyPage), historyTotalPages)
+  const historyPageSlice = historyRowsSorted.slice(
+    (historyPageClamped - 1) * HISTORY_PAGE_SIZE,
+    historyPageClamped * HISTORY_PAGE_SIZE
+  )
   const filteredWorkOrders = tickets.filter((ticket) => {
     const byStartDate = !workOrderSearch.startDate || ticket.createdAt >= workOrderSearch.startDate
     const byEndDate = !workOrderSearch.endDate || ticket.createdAt <= workOrderSearch.endDate
@@ -889,6 +914,19 @@ function App() {
           {activeMenu === 'Work-Order History' && (
             <div>
               <h2>Work-Order History</h2>
+              <p className="history-meta">
+                {historyRowsSorted.length === 0 ? (
+                  <>No work-orders in history.</>
+                ) : (
+                  <>
+                    Showing {(historyPageClamped - 1) * HISTORY_PAGE_SIZE + 1}
+                    –
+                    {Math.min(historyPageClamped * HISTORY_PAGE_SIZE, historyRowsSorted.length)} of {historyRowsSorted.length}
+                    {' '}
+                    ({HISTORY_PAGE_SIZE} per page)
+                  </>
+                )}
+              </p>
               <table>
                 <thead>
                   <tr>
@@ -901,7 +939,7 @@ function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(closedTickets.length ? closedTickets : tickets).map((ticket) => (
+                  {historyPageSlice.map((ticket) => (
                     <tr key={ticket.id}>
                       <td>
                         <button
@@ -921,6 +959,25 @@ function App() {
                   ))}
                 </tbody>
               </table>
+              <div className="pagination">
+                <button
+                  type="button"
+                  disabled={historyPageClamped <= 1}
+                  onClick={() => setHistoryPage((p) => Math.max(1, p - 1))}
+                >
+                  Previous
+                </button>
+                <span className="pagination-info">
+                  Page {historyPageClamped} of {historyTotalPages}
+                </span>
+                <button
+                  type="button"
+                  disabled={historyPageClamped >= historyTotalPages}
+                  onClick={() => setHistoryPage((p) => Math.min(historyTotalPages, p + 1))}
+                >
+                  Next
+                </button>
+              </div>
             </div>
           )}
 
