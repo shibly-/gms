@@ -11,20 +11,44 @@ const roles = [
 
 const HISTORY_PAGE_SIZE = 20
 
-const menus = [
-  'Dashboard',
-  'Work-Order Creation',
-  'Work-Order Management',
-  'Work-Order History',
+const ORDER_MANAGEMENT_ITEMS = [
+  'Work-Order Entry',
   'Work-Order Search',
-  'Work-Order Details',
-  'Staff Management',
-  'Supervisor Management',
-  'Technical Staff Management',
-  'Manager Management',
-  'Gate Keeper Management',
-  'Activity Log',
+  'Work-Order History',
+  'Invoices',
+  'Payment Received',
 ]
+
+const STAFF_MANAGEMENT_ITEMS = [
+  { id: 'Staff Management', label: 'All staff' },
+  { id: 'Supervisor Management' },
+  { id: 'Technical Staff Management' },
+  { id: 'Manager Management' },
+  { id: 'Gate Keeper Management' },
+]
+
+const NAV_CONFIG = [
+  { kind: 'link', id: 'Dashboard' },
+  {
+    kind: 'group',
+    label: 'Order Management',
+    items: ORDER_MANAGEMENT_ITEMS,
+  },
+  {
+    kind: 'group',
+    label: 'Staff Management',
+    items: STAFF_MANAGEMENT_ITEMS,
+  },
+  { kind: 'link', id: 'Activity Log' },
+]
+
+function navGroupItemId(item) {
+  return typeof item === 'string' ? item : item.id
+}
+
+function navGroupItemLabel(item) {
+  return typeof item === 'string' ? item : item.label || item.id
+}
 
 function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min
@@ -200,6 +224,14 @@ function formatCurrency(value) {
   }).format(value)
 }
 
+function parseYearMonthParts(ymKey) {
+  if (!ymKey || ymKey.length < 7) return { year: '—', monthName: '—' }
+  const [y, m] = ymKey.split('-').map(Number)
+  if (!y || !m) return { year: '—', monthName: '—' }
+  const monthName = new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'long' })
+  return { year: String(y), monthName }
+}
+
 function calculateTotals(ticket) {
   const approvedItems = ticket.items.filter((item) => item.approved)
   const partsCost = approvedItems.reduce((sum, item) => sum + item.cost, 0)
@@ -248,8 +280,11 @@ function getLast12MonthsSeries(workOrders) {
 function App() {
   const [activeRole, setActiveRole] = useState('Supervisor')
   const [activeMenu, setActiveMenu] = useState('Dashboard')
+  const [menuGroupsOpen, setMenuGroupsOpen] = useState({
+    'Order Management': true,
+    'Staff Management': true,
+  })
   const [tickets, setTickets] = useState(initialTickets)
-  const [selectedTicketId, setSelectedTicketId] = useState(initialTickets[0].id)
   const [staff, setStaff] = useState([
     { id: 'S-1', name: 'Anita', role: 'Supervisor', phone: '9000001111', active: true },
     { id: 'S-2', name: 'Raj', role: 'Senior Tech', phone: '9000002222', active: true },
@@ -274,13 +309,6 @@ function App() {
     noPlateDetected: false,
   })
 
-  const selectedTicket = useMemo(
-    () => tickets.find((ticket) => ticket.id === selectedTicketId) || tickets[0],
-    [selectedTicketId, tickets]
-  )
-
-  const totals = selectedTicket ? calculateTotals(selectedTicket) : null
-  const selectedWorkOrderInvoice = selectedTicket ? calculateTotals(selectedTicket) : null
   const closedTickets = tickets.filter((ticket) => ticket.stage === 'Closed')
   const activeWorkOrdersCount = tickets.filter(
     (ticket) => ticket.stage !== 'Closed' && ticket.stage !== 'Cancelled'
@@ -310,12 +338,19 @@ function App() {
   }))
   const managerStaff = staff.filter((person) => person.role === 'Manager')
   const gateKeeperStaff = staff.filter((person) => person.role === 'Gate Keeper')
-  const activityLogRows = tickets.flatMap((ticket) =>
-    ticket.timeline.map((event, index) => ({
-      id: `${ticket.id}-${index}`,
-      ticketId: ticket.id,
-      event,
-    }))
+  const activityLogRowsBase = useMemo(
+    () =>
+      tickets.flatMap((ticket) =>
+        ticket.timeline.map((event, index) => ({
+          id: `${ticket.id}-${index}`,
+          ticketId: ticket.id,
+          event,
+          supervisor: ticket.supervisor || '',
+          tech: ticket.tech || '',
+          logDate: ticket.createdAt || '',
+        }))
+      ),
+    [tickets]
   )
   const [workOrderSearch, setWorkOrderSearch] = useState({
     startDate: '',
@@ -325,7 +360,33 @@ function App() {
     gateKeeper: '',
     vehicleName: '',
   })
+  const [activityLogFilters, setActivityLogFilters] = useState({
+    workOrderId: '',
+    supervisor: '',
+    tech: '',
+    startDate: '',
+    endDate: '',
+  })
+  const filteredActivityLogRows = useMemo(() => {
+    const q = activityLogFilters.workOrderId.trim().toLowerCase()
+    return activityLogRowsBase.filter((row) => {
+      const byWorkOrder = !q || row.ticketId.toLowerCase().includes(q)
+      const bySupervisor = !activityLogFilters.supervisor || row.supervisor === activityLogFilters.supervisor
+      const byTech = !activityLogFilters.tech || row.tech === activityLogFilters.tech
+      const byStart = !activityLogFilters.startDate || (row.logDate && row.logDate >= activityLogFilters.startDate)
+      const byEnd = !activityLogFilters.endDate || (row.logDate && row.logDate <= activityLogFilters.endDate)
+      return byWorkOrder && bySupervisor && byTech && byStart && byEnd
+    })
+  }, [activityLogRowsBase, activityLogFilters])
   const [historyPage, setHistoryPage] = useState(1)
+  const [historyDetailModalId, setHistoryDetailModalId] = useState(null)
+  const [paymentMonthDetailYm, setPaymentMonthDetailYm] = useState(null)
+  const historyModalTicket = useMemo(
+    () => (historyDetailModalId ? tickets.find((t) => t.id === historyDetailModalId) : null),
+    [tickets, historyDetailModalId]
+  )
+  const historyModalTotals = historyModalTicket ? calculateTotals(historyModalTicket) : null
+
   const historyRowsSorted = useMemo(() => {
     const closed = tickets.filter((ticket) => ticket.stage === 'Closed')
     const rows = closed.length ? [...closed] : [...tickets]
@@ -343,6 +404,17 @@ function App() {
     setHistoryPage((page) => Math.min(page, historyTotalPages))
   }, [historyTotalPages])
 
+  useEffect(() => {
+    if (!historyDetailModalId && !paymentMonthDetailYm) return undefined
+    function onKeyDown(e) {
+      if (e.key !== 'Escape') return
+      if (paymentMonthDetailYm) setPaymentMonthDetailYm(null)
+      else if (historyDetailModalId) setHistoryDetailModalId(null)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [historyDetailModalId, paymentMonthDetailYm])
+
   const historyPageClamped = Math.min(Math.max(1, historyPage), historyTotalPages)
   const historyPageSlice = historyRowsSorted.slice(
     (historyPageClamped - 1) * HISTORY_PAGE_SIZE,
@@ -359,13 +431,86 @@ function App() {
     return byStartDate && byEndDate && byTech && bySupervisor && byGateKeeper && byVehicle
   })
 
-  function updateTicket(ticketId, updater) {
-    setTickets((current) =>
-      current.map((ticket) =>
-        ticket.id === ticketId ? updater(ticket) : ticket
-      )
-    )
-  }
+  const newAndActiveInvoiceRows = useMemo(() => {
+    const open = tickets.filter((t) => t.stage !== 'Closed' && t.stage !== 'Cancelled')
+    const rows = open.map((ticket) => ({
+      ticket,
+      invoiceKind: ticket.stage === 'Intake' ? 'New' : 'Active',
+      totals: calculateTotals(ticket),
+    }))
+    rows.sort((a, b) => {
+      if (a.invoiceKind !== b.invoiceKind) return a.invoiceKind === 'New' ? -1 : 1
+      const da = a.ticket.createdAt || ''
+      const db = b.ticket.createdAt || ''
+      return db.localeCompare(da)
+    })
+    return rows
+  }, [tickets])
+
+  const paymentReceivedByMonth = useMemo(() => {
+    const map = new Map()
+    tickets
+      .filter((t) => t.paid)
+      .forEach((ticket) => {
+        const ym = (ticket.createdAt || '').slice(0, 7)
+        if (!ym || ym.length < 7) return
+        const totals = calculateTotals(ticket)
+        const paidAmount = totals.totalAfterDiscount
+        const discount = Number(ticket.discount) || 0
+        if (!map.has(ym)) {
+          map.set(ym, {
+            ymKey: ym,
+            paidOrderCount: 0,
+            paymentReceived: 0,
+            discountsGiven: 0,
+          })
+        }
+        const row = map.get(ym)
+        row.paidOrderCount += 1
+        row.paymentReceived += paidAmount
+        row.discountsGiven += discount
+      })
+    const list = Array.from(map.values())
+    list.sort((a, b) => b.ymKey.localeCompare(a.ymKey))
+    return list
+  }, [tickets])
+
+  const paymentReceivedTotals = useMemo(
+    () =>
+      paymentReceivedByMonth.reduce(
+        (acc, row) => ({
+          paidOrderCount: acc.paidOrderCount + row.paidOrderCount,
+          paymentReceived: acc.paymentReceived + row.paymentReceived,
+          discountsGiven: acc.discountsGiven + row.discountsGiven,
+        }),
+        { paidOrderCount: 0, paymentReceived: 0, discountsGiven: 0 }
+      ),
+    [paymentReceivedByMonth]
+  )
+
+  const paidOrderDetailsByMonth = useMemo(() => {
+    const map = new Map()
+    tickets
+      .filter((t) => t.paid)
+      .forEach((ticket) => {
+        const ym = (ticket.createdAt || '').slice(0, 7)
+        if (!ym || ym.length < 7) return
+        const amount = calculateTotals(ticket).totalAfterDiscount
+        if (!map.has(ym)) map.set(ym, [])
+        map.get(ym).push({ workOrderId: ticket.id, amount })
+      })
+    map.forEach((list) => list.sort((a, b) => String(a.workOrderId).localeCompare(String(b.workOrderId))))
+    return map
+  }, [tickets])
+
+  const paymentMonthDetailLines = paymentMonthDetailYm
+    ? paidOrderDetailsByMonth.get(paymentMonthDetailYm) || []
+    : []
+  const paymentMonthModalTitle = useMemo(() => {
+    if (!paymentMonthDetailYm) return ''
+    const { year, monthName } = parseYearMonthParts(paymentMonthDetailYm)
+    return `${monthName} ${year}`
+  }, [paymentMonthDetailYm])
 
   function createTicket(event) {
     event.preventDefault()
@@ -400,7 +545,6 @@ function App() {
     }
 
     setTickets((current) => [createdTicket, ...current])
-    setSelectedTicketId(createdId)
     setNewTicketForm({
       plateNo: '',
       model: '',
@@ -434,93 +578,6 @@ function App() {
         person.id === staffId ? { ...person, active: !person.active } : person
       )
     )
-  }
-
-  function markTestVehicle() {
-    if (!selectedTicket) return
-    updateTicket(selectedTicket.id, (ticket) => ({
-      ...ticket,
-      isTestVehicle: true,
-      plateNo: null,
-      timeline: [...ticket.timeline, 'Vehicle tagged as On Test at gate'],
-    }))
-  }
-
-  function verifyGatePass() {
-    if (!selectedTicket) return
-    updateTicket(selectedTicket.id, (ticket) => ({
-      ...ticket,
-      gatePassVerified: true,
-      stage: ticket.stage === 'Intake' ? 'Diagnosis' : ticket.stage,
-      timeline: [...ticket.timeline, 'Gate pass verified'],
-    }))
-  }
-
-  function submitDiagnosis() {
-    if (!selectedTicket) return
-    updateTicket(selectedTicket.id, (ticket) => ({
-      ...ticket,
-      diagnosisSubmitted: true,
-      stage: 'Owner Approval',
-      timeline: [
-        ...ticket.timeline,
-        'Diagnosis submitted, owner + manager notified via API',
-      ],
-    }))
-  }
-
-  function toggleLineItem(itemId) {
-    if (!selectedTicket) return
-    updateTicket(selectedTicket.id, (ticket) => ({
-      ...ticket,
-      items: ticket.items.map((item) =>
-        item.id === itemId ? { ...item, approved: !item.approved } : item
-      ),
-    }))
-  }
-
-  function requestDiscount() {
-    if (!selectedTicket) return
-    updateTicket(selectedTicket.id, (ticket) => ({
-      ...ticket,
-      timeline: [...ticket.timeline, 'Owner requested discount, pending manager action'],
-    }))
-  }
-
-  function approveDiscount() {
-    if (!selectedTicket) return
-    const recommendedDiscount = Math.round(calculateTotals(selectedTicket).totalBeforeDiscount * 0.1)
-    updateTicket(selectedTicket.id, (ticket) => ({
-      ...ticket,
-      discount: recommendedDiscount,
-      stage: 'Repair In Progress',
-      timeline: [...ticket.timeline, `Manager approved discount ${formatCurrency(recommendedDiscount)}`],
-    }))
-  }
-
-  function completeQc() {
-    if (!selectedTicket) return
-    updateTicket(selectedTicket.id, (ticket) => ({
-      ...ticket,
-      qcDone: true,
-      stage: 'Ready for Delivery',
-      timeline: [...ticket.timeline, 'QC passed, IVR call triggered to owner'],
-    }))
-  }
-
-  function markPaid() {
-    if (!selectedTicket) return
-    updateTicket(selectedTicket.id, (ticket) => ({
-      ...ticket,
-      paid: true,
-      stage: 'Closed',
-      timeline: [...ticket.timeline, 'Payment captured and ticket closed'],
-    }))
-  }
-
-  function openWorkOrderDetails(workOrderId) {
-    setSelectedTicketId(workOrderId)
-    setActiveMenu('Work-Order Details')
   }
 
   function downloadInvoice(ticket) {
@@ -591,16 +648,60 @@ function App() {
       <main className="layout-with-menu">
         <aside className="panel sidebar">
           <h2>Menu</h2>
-          {menus.map((menu) => (
-            <button
-              type="button"
-              key={menu}
-              className={`menu-btn ${activeMenu === menu ? 'active' : ''}`}
-              onClick={() => setActiveMenu(menu)}
-            >
-              {menu}
-            </button>
-          ))}
+          {NAV_CONFIG.map((entry) => {
+            if (entry.kind === 'link') {
+              return (
+                <button
+                  type="button"
+                  key={entry.id}
+                  className={`menu-btn ${activeMenu === entry.id ? 'active' : ''}`}
+                  onClick={() => setActiveMenu(entry.id)}
+                >
+                  {entry.id}
+                </button>
+              )
+            }
+            const childActive = entry.items.some((item) => navGroupItemId(item) === activeMenu)
+            const groupOpen = menuGroupsOpen[entry.label] !== false
+            return (
+              <div key={entry.label} className="menu-group">
+                <button
+                  type="button"
+                  className={`menu-group-toggle ${childActive ? 'menu-group-active' : ''}`}
+                  onClick={() =>
+                    setMenuGroupsOpen((prev) => ({
+                      ...prev,
+                      [entry.label]: !prev[entry.label],
+                    }))
+                  }
+                  aria-expanded={groupOpen}
+                >
+                  <span>{entry.label}</span>
+                  <span className="menu-chevron" aria-hidden>
+                    {groupOpen ? '▾' : '▸'}
+                  </span>
+                </button>
+                {groupOpen && (
+                  <div className="menu-sublist">
+                    {entry.items.map((item) => {
+                      const itemId = navGroupItemId(item)
+                      const itemLabel = navGroupItemLabel(item)
+                      return (
+                        <button
+                          type="button"
+                          key={itemId}
+                          className={`menu-btn menu-sub ${activeMenu === itemId ? 'active' : ''}`}
+                          onClick={() => setActiveMenu(itemId)}
+                        >
+                          {itemLabel}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </aside>
 
         <section className="panel content-page">
@@ -706,35 +807,55 @@ function App() {
                 <p>View overall KPIs, monthly work-order trends, and status-wise performance in the stacked bar chart.</p>
               </div>
               <div className="guide-section">
-                <h3>2) Work-Order Creation</h3>
+                <h3>2) Order Management</h3>
+                <p>
+                  Use the Order Management section in the menu to open Work-Order Entry, Work-Order Search, Work-Order History, Invoices, and Payment Received.
+                  Click the group header to expand or collapse these items.
+                </p>
+              </div>
+              <div className="guide-section">
+                <h3>3) Work-Order Entry</h3>
                 <p>Create new work-orders when vehicles arrive. Use the no-plate option for test vehicles and record gate verification.</p>
               </div>
               <div className="guide-section">
-                <h3>3) Work-Order Management</h3>
-                <p>Open any work-order to update diagnosis, owner approvals, discounts, QC completion, and payment closure by role.</p>
-              </div>
-              <div className="guide-section">
-                <h3>4) Work-Order History & Details</h3>
-                <p>Click a Work-Order ID in history to open invoice details. Download invoice to share or archive billing information.</p>
-              </div>
-              <div className="guide-section">
-                <h3>5) Work-Order Search</h3>
+                <h3>4) Work-Order Search</h3>
                 <p>Use start/end date, technical staff, supervisor, gate keeper, and vehicle name filters to locate records quickly.</p>
               </div>
               <div className="guide-section">
-                <h3>6) Staff Modules</h3>
-                <p>Manage all staff and view role-specific lists for supervisors, technical staff, managers, and gate keepers.</p>
+                <h3>5) Work-Order History & Details</h3>
+                <p>Click a Work-Order ID in history to open invoice details. Download invoice to share or archive billing information.</p>
               </div>
               <div className="guide-section">
-                <h3>7) Activity Log</h3>
+                <h3>6) Invoices</h3>
+                <p>
+                  View all new and active invoices: new means intake stage, active means any other open work-order before closure or cancellation.
+                  Click a Work-Order ID to open the invoice popup.
+                </p>
+              </div>
+              <div className="guide-section">
+                <h3>7) Payment Received</h3>
+                <p>
+                  See payment collected and discounts given by calendar month and year for all paid work-orders (grouped by work-order created date).
+                  Click a paid work-order count to open a list of work-order IDs and amounts; from there you can open the full invoice popup for a row.
+                </p>
+              </div>
+              <div className="guide-section">
+                <h3>8) Staff Management</h3>
+                <p>
+                  Open the Staff Management section in the menu for All staff (add and list), plus Supervisor, Technical staff,
+                  Manager, and Gate keeper role views. Use the group header to expand or collapse these items.
+                </p>
+              </div>
+              <div className="guide-section">
+                <h3>9) Activity Log</h3>
                 <p>Track timeline events for each work-order to support audit and operational transparency.</p>
               </div>
             </div>
           )}
 
-          {activeMenu === 'Work-Order Creation' && (
+          {activeMenu === 'Work-Order Entry' && (
             <div>
-              <h2>Work-Order Creation</h2>
+              <h2>Work-Order Entry</h2>
               <form className="intake-form wide" onSubmit={createTicket}>
                 <h3>Vehicle Arrival Intake</h3>
                 <input
@@ -811,106 +932,6 @@ function App() {
             </div>
           )}
 
-          {activeMenu === 'Work-Order Management' && (
-            <div className="ticket-management-layout">
-              <div className="ticket-list-mini">
-                <h2>Work-Order Management</h2>
-                {tickets.map((ticket) => {
-                  const ticketTotals = calculateTotals(ticket)
-                  return (
-                    <button
-                      key={ticket.id}
-                      className={`ticket-card ${ticket.id === selectedTicket?.id ? 'active' : ''}`}
-                      onClick={() => setSelectedTicketId(ticket.id)}
-                      type="button"
-                    >
-                      <div className="ticket-header">
-                        <strong>{ticket.id}</strong>
-                        <span className="status">{ticket.stage}</span>
-                      </div>
-                      <p>{ticket.plateNo || 'NO-PLATE / TEST'}</p>
-                      <small>{formatCurrency(ticketTotals.totalAfterDiscount)}</small>
-                    </button>
-                  )
-                })}
-              </div>
-
-              {selectedTicket && (
-                <div>
-                  <h3>Work-Order {selectedTicket.id}</h3>
-                  <div className="grid">
-                    <div>
-                      <p><strong>Plate:</strong> {selectedTicket.plateNo || 'Not detected'}</p>
-                      <p><strong>Model:</strong> {selectedTicket.model}</p>
-                      <p><strong>Supervisor:</strong> {selectedTicket.supervisor}</p>
-                      <p><strong>Tech:</strong> {selectedTicket.tech || 'Unassigned'}</p>
-                      <p><strong>Gate keeper:</strong> {selectedTicket.gateKeeper || 'Unassigned'}</p>
-                      <p><strong>Date:</strong> {selectedTicket.createdAt || '-'}</p>
-                      <p><strong>Gate pass:</strong> {selectedTicket.gatePassVerified ? 'Verified' : 'Pending'}</p>
-                    </div>
-                    <div className="totals">
-                      <p><strong>Parts:</strong> {formatCurrency(totals.partsCost)}</p>
-                      <p><strong>Service charge:</strong> {formatCurrency(selectedTicket.serviceCharge)}</p>
-                      <p><strong>Discount:</strong> {formatCurrency(selectedTicket.discount)}</p>
-                      <p className="grand"><strong>Total:</strong> {formatCurrency(totals.totalAfterDiscount)}</p>
-                    </div>
-                  </div>
-
-                  <h3>Diagnosis and Owner Approval</h3>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Approve</th>
-                        <th>Issue</th>
-                        <th>Cost</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedTicket.items.map((item) => (
-                        <tr key={item.id}>
-                          <td>
-                            <input
-                              type="checkbox"
-                              checked={item.approved}
-                              onChange={() => toggleLineItem(item.id)}
-                              disabled={activeRole !== 'Owner (Client)'}
-                            />
-                          </td>
-                          <td>{item.description}</td>
-                          <td>{formatCurrency(item.cost)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-
-                  <div className="actions">
-                    <button type="button" onClick={markTestVehicle} disabled={activeRole !== 'Gate Keeper'}>
-                      Tag On Test
-                    </button>
-                    <button type="button" onClick={verifyGatePass} disabled={activeRole !== 'Gate Keeper'}>
-                      Verify Gate Pass
-                    </button>
-                    <button type="button" onClick={submitDiagnosis} disabled={activeRole !== 'Senior Tech'}>
-                      Submit Diagnosis
-                    </button>
-                    <button type="button" onClick={requestDiscount} disabled={activeRole !== 'Owner (Client)'}>
-                      Request Discount
-                    </button>
-                    <button type="button" onClick={approveDiscount} disabled={activeRole !== 'Manager'}>
-                      Approve Discount
-                    </button>
-                    <button type="button" onClick={completeQc} disabled={activeRole !== 'Supervisor'}>
-                      Complete QC + Trigger IVR
-                    </button>
-                    <button type="button" onClick={markPaid} disabled={activeRole !== 'Owner (Client)'}>
-                      Pay and Close
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
           {activeMenu === 'Work-Order History' && (
             <div>
               <h2>Work-Order History</h2>
@@ -945,7 +966,7 @@ function App() {
                         <button
                           type="button"
                           className="link-btn"
-                          onClick={() => openWorkOrderDetails(ticket.id)}
+                          onClick={() => setHistoryDetailModalId(ticket.id)}
                         >
                           {ticket.id}
                         </button>
@@ -977,58 +998,6 @@ function App() {
                 >
                   Next
                 </button>
-              </div>
-            </div>
-          )}
-
-          {activeMenu === 'Work-Order Details' && selectedTicket && (
-            <div>
-              <h2>Work-Order Details</h2>
-              <div className="invoice-card">
-                <div className="invoice-head">
-                  <h3>Invoice - {selectedTicket.id}</h3>
-                  <button type="button" onClick={() => downloadInvoice(selectedTicket)}>
-                    Download Invoice
-                  </button>
-                </div>
-                <div className="grid">
-                  <div>
-                    <p><strong>Date:</strong> {selectedTicket.createdAt || '-'}</p>
-                    <p><strong>Vehicle:</strong> {selectedTicket.model}</p>
-                    <p><strong>Plate:</strong> {selectedTicket.plateNo || 'NO-PLATE / TEST'}</p>
-                    <p><strong>Supervisor:</strong> {selectedTicket.supervisor || '-'}</p>
-                    <p><strong>Technical Staff:</strong> {selectedTicket.tech || '-'}</p>
-                    <p><strong>Gate Keeper:</strong> {selectedTicket.gateKeeper || '-'}</p>
-                  </div>
-                  <div className="totals">
-                    <p><strong>Parts Total:</strong> {formatCurrency(selectedWorkOrderInvoice.partsCost)}</p>
-                    <p><strong>Service Charge:</strong> {formatCurrency(selectedTicket.serviceCharge)}</p>
-                    <p><strong>Discount:</strong> {formatCurrency(selectedTicket.discount)}</p>
-                    <p className="grand"><strong>Invoice Total:</strong> {formatCurrency(selectedWorkOrderInvoice.totalAfterDiscount)}</p>
-                    <p><strong>Payment Status:</strong> {selectedTicket.paid ? 'Paid' : 'Unpaid'}</p>
-                  </div>
-                </div>
-                <h3>Invoice Items</h3>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>#</th>
-                      <th>Description</th>
-                      <th>Amount</th>
-                      <th>Approval</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedTicket.items.map((item, index) => (
-                      <tr key={item.id}>
-                        <td>{index + 1}</td>
-                        <td>{item.description}</td>
-                        <td>{formatCurrency(item.cost)}</td>
-                        <td>{item.approved ? 'Approved' : 'Rejected'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
               </div>
             </div>
           )}
@@ -1115,7 +1084,15 @@ function App() {
                 <tbody>
                   {filteredWorkOrders.map((ticket) => (
                     <tr key={ticket.id}>
-                      <td>{ticket.id}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="link-btn"
+                          onClick={() => setHistoryDetailModalId(ticket.id)}
+                        >
+                          {ticket.id}
+                        </button>
+                      </td>
                       <td>{ticket.model}</td>
                       <td>{ticket.createdAt || '-'}</td>
                       <td>{ticket.tech || '-'}</td>
@@ -1127,6 +1104,119 @@ function App() {
                   {filteredWorkOrders.length === 0 && (
                     <tr>
                       <td colSpan="7">No matching work-orders found.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {activeMenu === 'Invoices' && (
+            <div>
+              <h2>Invoices</h2>
+              <p className="history-meta">
+                New invoices are work-orders in <strong>Intake</strong>. Active invoices are all other open work-orders (not closed or cancelled).
+                {' '}
+                Showing {newAndActiveInvoiceRows.length} invoice{newAndActiveInvoiceRows.length === 1 ? '' : 's'}.
+              </p>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Invoice</th>
+                    <th>Work-Order ID</th>
+                    <th>Vehicle</th>
+                    <th>Plate</th>
+                    <th>Stage</th>
+                    <th>Date</th>
+                    <th>Total</th>
+                    <th>Payment</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {newAndActiveInvoiceRows.map(({ ticket, invoiceKind, totals }) => (
+                    <tr key={ticket.id}>
+                      <td>
+                        <span className={`invoice-badge invoice-badge-${invoiceKind.toLowerCase()}`}>
+                          {invoiceKind}
+                        </span>
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="link-btn"
+                          onClick={() => setHistoryDetailModalId(ticket.id)}
+                        >
+                          {ticket.id}
+                        </button>
+                      </td>
+                      <td>{ticket.model}</td>
+                      <td>{ticket.plateNo || '—'}</td>
+                      <td>{ticket.stage}</td>
+                      <td>{ticket.createdAt || '—'}</td>
+                      <td>{formatCurrency(totals.totalAfterDiscount)}</td>
+                      <td>{ticket.paid ? 'Paid' : 'Unpaid'}</td>
+                    </tr>
+                  ))}
+                  {newAndActiveInvoiceRows.length === 0 && (
+                    <tr>
+                      <td colSpan="8">No new or active invoices.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {activeMenu === 'Payment Received' && (
+            <div>
+              <h2>Payment Received</h2>
+                <p className="history-meta">
+                Totals include every work-order marked <strong>paid</strong>, grouped by <strong>year and month</strong> of the work-order
+                <strong> created date</strong> (YYYY-MM). Payment received is the final invoice total after discounts; discounts given is the sum of
+                discount amounts in that month. Click a <strong>Paid work-orders</strong> count to see each work-order ID and amount for that month.
+              </p>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Year</th>
+                    <th>Month</th>
+                    <th>Paid work-orders</th>
+                    <th>Payment received</th>
+                    <th>Discounts given</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paymentReceivedByMonth.map((row) => {
+                    const { year, monthName } = parseYearMonthParts(row.ymKey)
+                    return (
+                      <tr key={row.ymKey}>
+                        <td>{year}</td>
+                        <td>{monthName}</td>
+                        <td>
+                          <button
+                            type="button"
+                            className="link-btn"
+                            onClick={() => setPaymentMonthDetailYm(row.ymKey)}
+                          >
+                            {row.paidOrderCount}
+                          </button>
+                        </td>
+                        <td>{formatCurrency(row.paymentReceived)}</td>
+                        <td>{formatCurrency(row.discountsGiven)}</td>
+                      </tr>
+                    )
+                  })}
+                  {paymentReceivedByMonth.length > 0 && (
+                    <tr className="payment-totals-row">
+                      <td colSpan="2"><strong>All periods</strong></td>
+                      <td><strong>{paymentReceivedTotals.paidOrderCount}</strong></td>
+                      <td><strong>{formatCurrency(paymentReceivedTotals.paymentReceived)}</strong></td>
+                      <td><strong>{formatCurrency(paymentReceivedTotals.discountsGiven)}</strong></td>
+                    </tr>
+                  )}
+                  {paymentReceivedByMonth.length === 0 && (
+                    <tr>
+                      <td colSpan="5">No paid work-orders to show.</td>
                     </tr>
                   )}
                 </tbody>
@@ -1292,26 +1382,239 @@ function App() {
           {activeMenu === 'Activity Log' && (
             <div>
               <h2>Activity Log</h2>
+              <div className="search-filters activity-log-filters">
+                <input
+                  type="text"
+                  placeholder="Search Work-Order ID"
+                  value={activityLogFilters.workOrderId}
+                  onChange={(e) => setActivityLogFilters((prev) => ({ ...prev, workOrderId: e.target.value }))}
+                  aria-label="Search by Work-Order ID"
+                />
+                <select
+                  value={activityLogFilters.supervisor}
+                  onChange={(e) => setActivityLogFilters((prev) => ({ ...prev, supervisor: e.target.value }))}
+                  aria-label="Filter by supervisor"
+                >
+                  <option value="">All supervisors</option>
+                  {supervisorStaff.map((person) => (
+                    <option key={person.id} value={person.name}>{person.name}</option>
+                  ))}
+                </select>
+                <select
+                  value={activityLogFilters.tech}
+                  onChange={(e) => setActivityLogFilters((prev) => ({ ...prev, tech: e.target.value }))}
+                  aria-label="Filter by technical staff"
+                >
+                  <option value="">All technical staff</option>
+                  {technicalStaff.map((person) => (
+                    <option key={person.id} value={person.name}>{person.name}</option>
+                  ))}
+                </select>
+                <input
+                  type="date"
+                  value={activityLogFilters.startDate}
+                  onChange={(e) => setActivityLogFilters((prev) => ({ ...prev, startDate: e.target.value }))}
+                  aria-label="Start date"
+                  title="Start date"
+                />
+                <input
+                  type="date"
+                  value={activityLogFilters.endDate}
+                  onChange={(e) => setActivityLogFilters((prev) => ({ ...prev, endDate: e.target.value }))}
+                  aria-label="End date"
+                  title="End date"
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    setActivityLogFilters({
+                      workOrderId: '',
+                      supervisor: '',
+                      tech: '',
+                      startDate: '',
+                      endDate: '',
+                    })
+                  }
+                >
+                  Reset filters
+                </button>
+              </div>
+              <p className="history-meta">
+                Showing {filteredActivityLogRows.length} of {activityLogRowsBase.length} entries
+                {activityLogFilters.startDate || activityLogFilters.endDate
+                  ? ' (dates use work-order created date)'
+                  : ''}
+              </p>
               <table>
                 <thead>
                   <tr>
                     <th>Work-Order ID</th>
+                    <th>Supervisor</th>
+                    <th>Technical Staff</th>
+                    <th>Work-order date</th>
                     <th>Event</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {activityLogRows.map((entry) => (
+                  {filteredActivityLogRows.map((entry) => (
                     <tr key={entry.id}>
                       <td>{entry.ticketId}</td>
+                      <td>{entry.supervisor || '-'}</td>
+                      <td>{entry.tech || '-'}</td>
+                      <td>{entry.logDate || '-'}</td>
                       <td>{entry.event}</td>
                     </tr>
                   ))}
+                  {filteredActivityLogRows.length === 0 && (
+                    <tr>
+                      <td colSpan="5">No activity matches the current filters.</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
           )}
         </section>
       </main>
+
+      {historyDetailModalId && historyModalTicket && historyModalTotals && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={() => setHistoryDetailModalId(null)}
+        >
+          <div
+            className="modal-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="history-modal-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-head">
+              <h3 id="history-modal-title">Work-Order {historyModalTicket.id}</h3>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={() => setHistoryDetailModalId(null)}
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="invoice-card modal-invoice">
+              <div className="invoice-head">
+                <h4>Invoice</h4>
+                <button type="button" onClick={() => downloadInvoice(historyModalTicket)}>
+                  Download Invoice
+                </button>
+              </div>
+              <div className="grid">
+                <div>
+                  <p><strong>Date:</strong> {historyModalTicket.createdAt || '-'}</p>
+                  <p><strong>Vehicle:</strong> {historyModalTicket.model}</p>
+                  <p><strong>Plate:</strong> {historyModalTicket.plateNo || 'NO-PLATE / TEST'}</p>
+                  <p><strong>Supervisor:</strong> {historyModalTicket.supervisor || '-'}</p>
+                  <p><strong>Technical Staff:</strong> {historyModalTicket.tech || '-'}</p>
+                  <p><strong>Gate Keeper:</strong> {historyModalTicket.gateKeeper || '-'}</p>
+                  <p><strong>Stage:</strong> {historyModalTicket.stage}</p>
+                </div>
+                <div className="totals">
+                  <p><strong>Parts Total:</strong> {formatCurrency(historyModalTotals.partsCost)}</p>
+                  <p><strong>Service Charge:</strong> {formatCurrency(historyModalTicket.serviceCharge)}</p>
+                  <p><strong>Discount:</strong> {formatCurrency(historyModalTicket.discount)}</p>
+                  <p className="grand"><strong>Invoice Total:</strong> {formatCurrency(historyModalTotals.totalAfterDiscount)}</p>
+                  <p><strong>Payment Status:</strong> {historyModalTicket.paid ? 'Paid' : 'Unpaid'}</p>
+                </div>
+              </div>
+              <h3>Invoice Items</h3>
+              <table>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Description</th>
+                    <th>Amount</th>
+                    <th>Approval</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {historyModalTicket.items.map((item, index) => (
+                    <tr key={item.id}>
+                      <td>{index + 1}</td>
+                      <td>{item.description}</td>
+                      <td>{formatCurrency(item.cost)}</td>
+                      <td>{item.approved ? 'Approved' : 'Rejected'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {paymentMonthDetailYm && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={() => setPaymentMonthDetailYm(null)}
+        >
+          <div
+            className="modal-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="payment-month-modal-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-head">
+              <h3 id="payment-month-modal-title">
+                Paid work-orders — {paymentMonthModalTitle}
+              </h3>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={() => setPaymentMonthDetailYm(null)}
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="modal-payment-list">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Work-Order ID</th>
+                    <th>Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paymentMonthDetailLines.map((line) => (
+                    <tr key={line.workOrderId}>
+                      <td>
+                        <button
+                          type="button"
+                          className="link-btn"
+                          onClick={() => {
+                            setPaymentMonthDetailYm(null)
+                            setHistoryDetailModalId(line.workOrderId)
+                          }}
+                        >
+                          {line.workOrderId}
+                        </button>
+                      </td>
+                      <td>{formatCurrency(line.amount)}</td>
+                    </tr>
+                  ))}
+                  {paymentMonthDetailLines.length === 0 && (
+                    <tr>
+                      <td colSpan="2">No paid orders for this month.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
